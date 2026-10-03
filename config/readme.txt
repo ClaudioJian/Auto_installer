@@ -1,6 +1,7 @@
 Project Setup & Configuration Guide
     This automation tool streamlines the installation of project dependencies, handles initial server configuration, 
     runs initialization scripts (such as database structural setups), and generates local environment baselines.
+    Put this in root of project, it can be putted in any subfolder if front end cannot read it, just ensure the code can find env file, which will be same place as this folder.
 
 1. Directory Purpose & Automation Overview
     When executed, setup.exe automatically processes the environment setup relative to the project root directory.

@@ -159,6 +159,7 @@ static int confirmation(const char *action,const char *confirmation_text,error_d
  * 
  * After sucess, set in global value .
  * @param error_code change address of it, check content
+ * @param prev_data reduce affected data count if isn't null
  * @returns int
  * - 1 = true when path is accuracy 
  * 
@@ -166,7 +167,7 @@ static int confirmation(const char *action,const char *confirmation_text,error_d
  * 
  * - -1 = buffer overflow, fseek error, malloc error
  */
-static int PHP_exists(ENV_CONFIG_field *data, config_states *states){
+static int PHP_exists(ENV_CONFIG_field *data, ENV_CONFIG_field *prev_data,config_states *states){
     error_details *err = states->err;
     global_values *gv = states->flags;
 
@@ -179,7 +180,7 @@ static int PHP_exists(ENV_CONFIG_field *data, config_states *states){
     //if not finded php path, loop until find
     do{
         //find where is php path
-        const int find = catch_err(ENV_CONFIG_adjust_key(PHP_path_envKeyName,data,NULL,internal_mode,states));
+        const int find = catch_err(ENV_CONFIG_adjust_key(PHP_path_envKeyName,data,NULL,w_mode,states));
         if(err->code) return -1;
         // 0 mean key name error and negative mean error like malloc
         if(find){
@@ -249,6 +250,23 @@ static int PHP_exists(ENV_CONFIG_field *data, config_states *states){
     //store php location in global value
     gv->PHP_LOCATION = malloc(strlen(data->value)+1);
     strcpy(gv->PHP_LOCATION, data->value);
+
+
+    if(prev_data){
+        //check storage
+        config_node *curr_node = prev_data->depencity_list;
+
+        while(curr_node!=NULL){
+            //comparing previous data env name
+            if(strcmp(curr_node->key,PHP_path_envKeyName) == 0){
+                if(strcmp(curr_node->value,data->value) == 0) data->affected_data--;
+                break;
+            }
+            
+            curr_node = curr_node->next; //move forward
+        }
+    }
+
     ENV_CONFIG_clear(data);
 
     if(gv->PHP_LOCATION == NULL) {
@@ -256,8 +274,6 @@ static int PHP_exists(ENV_CONFIG_field *data, config_states *states){
         return -1;
     }
 
-    ENV_CONFIG_track_depencity(data,err);
-    ENV_CONFIG_clear(data);
     return 1;
 }
 
@@ -935,18 +951,22 @@ ENV_CONFIG_field *start_program(ENV_CONFIG_field *internal_data,ENV_CONFIG_field
     ENV_CONFIG_field *prev_data = catch_err(has_prev_data(ENV_FILE_name,&selected_mode,states));
     if(err->code) return NULL;
 
-    //find key ENVIROMENT in previous data and compare with current inputed data, if same, affected_data -1 since it won't be affected, else keep it since it will be affected
+    /*
+     Find ENVIRONMENT and PHP_PATH in the previous data
+     ENVIRONMENT: compare its value with current input. same then not affect= affected data--
+     PHP_PATH: Remove it from previous data because will be set after and should use future input instead previous data. then affected data--
+     */
     if(prev_data){
         //check storage
         config_node *curr_node = prev_data->depencity_list;
 
         while(curr_node!=NULL){
             //comparing previous data env name
-            if(strcmp(curr_node->key,ENVIRONMENT_KEY_NAME) == 0) {
-                //compare
+            if(strcmp(curr_node->key,ENVIRONMENT_KEY_NAME) == 0){
                 if(strcmp(curr_node->value,ENV_data->value) == 0) ENV_data->affected_data--;
                 break;
             }
+            
             curr_node = curr_node->next; //move forward
         }
     }
@@ -975,7 +995,7 @@ ENV_CONFIG_field *start_program(ENV_CONFIG_field *internal_data,ENV_CONFIG_field
     if(err->code) return prev_data;
 
 
-    const int php_exists = catch_err(PHP_exists(internal_data,states));
+    const int php_exists = catch_err(PHP_exists(ENV_data,prev_data,states));
     if(!php_exists){err->code = ERR_PHP_not_found; return prev_data;}
 
     catch_err(ENV_CONFIG_set_all(internal_data,NULL,internal_mode,states));
